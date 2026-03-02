@@ -6,6 +6,7 @@ const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const LEAGUE_ID = process.env.LEAGUE_ID;
 const SLEEPER_BASE_URL = process.env.SLEEPER_BASE_URL || "https://api.sleeper.app/v1";
+const SLEEPER_CDN_BASE_URL = process.env.SLEEPER_CDN_BASE_URL || "https://sleepercdn.com";
 const HISTORICAL_LEAGUE_IDS = (process.env.HISTORICAL_LEAGUE_IDS || "")
   .split(",")
   .map((id) => id.trim())
@@ -41,6 +42,23 @@ function formatRecord(settings = {}) {
 
 function formatRecordFromParts(wins = 0, losses = 0, ties = 0) {
   return ties > 0 ? `${wins}-${losses}-${ties}` : `${wins}-${losses}`;
+}
+
+function buildAvatarUrl(avatar) {
+  if (!avatar) {
+    return null;
+  }
+
+  const normalized = String(avatar).trim();
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
+    return normalized;
+  }
+
+  return `${SLEEPER_CDN_BASE_URL}/avatars/${normalized}`;
 }
 
 function calculateBaselineFinishByRosterId(rosters = []) {
@@ -543,12 +561,15 @@ app.get("/api/members", async (req, res) => {
 
       return {
         rosterId: roster.roster_id,
+        userId: user.user_id || roster.owner_id || null,
         memberName: user.display_name || user.username || "Unknown Member",
         teamName:
           rosterMeta.team_name ||
           userMeta.team_name ||
           user.display_name ||
           `Team ${roster.roster_id}`,
+        avatar: user.avatar || null,
+        avatarUrl: buildAvatarUrl(user.avatar),
         allTimeRecord: formatRecordFromParts(
           allTimeParts.wins,
           allTimeParts.losses,
