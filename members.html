@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Domination League | Members</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="site-shell">
+    <header class="site-header">
+      <h1 class="league-title">Domination League</h1>
+      <p class="league-subtitle">Members Tab</p>
+      <nav class="tab-nav" aria-label="Main tabs">
+        <a class="tab-link" href="index.html">Home</a>
+        <a class="tab-link" href="matchups.html">Matchups</a>
+        <a class="tab-link" href="player-stats.html">Player Stats</a>
+        <a class="tab-link" href="team-stats.html">Team Stats</a>
+        <a class="tab-link" href="blog.html">Blog</a>
+        <a class="tab-link active" href="members.html">Members</a>
+      </nav>
+    </header>
+
+    <main class="main-content">
+      <section class="panel">
+        <h2>League Members</h2>
+        <p class="lead">Each card shows team name, all-time and current-year records, finish history, all-time PPG, and scoring totals.</p>
+        <p id="members-status" class="footer-note">Loading team data...</p>
+      </section>
+
+      <section id="members-grid" class="members-grid" aria-live="polite"></section>
+    </main>
+  </div>
+
+  <script src="members.js"></script>
+</body>
+</html>
