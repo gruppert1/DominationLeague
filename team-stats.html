@@ -14,7 +14,6 @@
       <nav class="tab-nav" aria-label="Main tabs">
         <a class="tab-link" href="index.html">Home</a>
         <a class="tab-link" href="matchups.html">Matchups</a>
-        <a class="tab-link" href="player-stats.html">Player Stats</a>
         <a class="tab-link active" href="team-stats.html">Team Stats</a>
         <a class="tab-link" href="blog.html">Blog</a>
         <a class="tab-link" href="members.html">Members</a>
@@ -24,45 +23,28 @@
     <main class="main-content">
       <section class="panel">
         <h2>Team Performance Board</h2>
-        <p class="lead">UI shell for franchise-level records, points scored, points against, and streak metrics.</p>
+        <p class="lead">Current standings with league record, division record, and points tiebreaker.</p>
+        <p id="team-stats-status" class="footer-note">Loading team stats...</p>
 
-        <table class="placeholder-table" aria-label="Team stat placeholders">
+        <table class="placeholder-table" aria-label="Team stats">
           <thead>
             <tr>
-              <th>Franchise</th>
-              <th>Record</th>
+              <th>Rank</th>
+              <th>Team</th>
+              <th>Manager</th>
+              <th>Division</th>
+              <th>League Record</th>
+              <th>Division Record</th>
               <th>PF</th>
               <th>PA</th>
-              <th>Current Streak</th>
             </tr>
           </thead>
-          <tbody>
-            <tr>
-              <td>Team Alpha</td>
-              <td>9-3</td>
-              <td>1512.6</td>
-              <td>1387.4</td>
-              <td><span class="chip">W3</span></td>
-            </tr>
-            <tr>
-              <td>Team Prime</td>
-              <td>8-4</td>
-              <td>1476.8</td>
-              <td>1411.2</td>
-              <td><span class="chip">W1</span></td>
-            </tr>
-            <tr>
-              <td>Team Rivals</td>
-              <td>7-5</td>
-              <td>1432.1</td>
-              <td>1427.9</td>
-              <td><span class="chip">L1</span></td>
-            </tr>
-          </tbody>
+          <tbody id="team-stats-body"></tbody>
         </table>
       </section>
     </main>
   </div>
+
+  <script src="team-stats.js"></script>
 </body>
 </html>
-

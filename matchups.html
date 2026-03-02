@@ -14,7 +14,6 @@
       <nav class="tab-nav" aria-label="Main tabs">
         <a class="tab-link" href="index.html">Home</a>
         <a class="tab-link active" href="matchups.html">Matchups</a>
-        <a class="tab-link" href="player-stats.html">Player Stats</a>
         <a class="tab-link" href="team-stats.html">Team Stats</a>
         <a class="tab-link" href="blog.html">Blog</a>
         <a class="tab-link" href="members.html">Members</a>
@@ -24,41 +23,20 @@
     <main class="main-content">
       <section class="panel">
         <h2>Weekly Matchups</h2>
-        <p class="lead">UI placeholders for head-to-head games. Logic and Sleeper data integration can be added later.</p>
-
-        <table class="placeholder-table" aria-label="Matchup placeholders">
-          <thead>
-            <tr>
-              <th>Matchup</th>
-              <th>Projected</th>
-              <th>Time Window</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Team Alpha vs Team Omega</td>
-              <td>123.4 - 118.9</td>
-              <td>Sun 1:00 PM ET</td>
-              <td><span class="chip">Preview</span></td>
-            </tr>
-            <tr>
-              <td>Team Blitz vs Team Prime</td>
-              <td>109.6 - 112.2</td>
-              <td>Sun 4:25 PM ET</td>
-              <td><span class="chip">Preview</span></td>
-            </tr>
-            <tr>
-              <td>Team Dynasty vs Team Rivals</td>
-              <td>131.8 - 130.7</td>
-              <td>Mon 8:15 PM ET</td>
-              <td><span class="chip">Preview</span></td>
-            </tr>
-          </tbody>
-        </table>
+        <p class="lead">Current-week head-to-head matchups with projections, live points, and member-vote win percentages.</p>
+        <div class="filters-row" aria-label="Matchup filters">
+          <label class="filter-control">
+            <span>Week</span>
+            <select id="matchups-week-filter"></select>
+          </label>
+        </div>
+        <p id="matchups-status" class="footer-note">Loading current week matchups...</p>
       </section>
+
+      <section id="matchups-grid" class="matchups-grid" aria-live="polite"></section>
     </main>
   </div>
+
+  <script src="matchups.js"></script>
 </body>
 </html>
-

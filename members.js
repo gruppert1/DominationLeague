@@ -191,8 +191,8 @@ function renderMemberCard(member, currentSeason) {
     createStat("Lowest Finish", formatFinishWithYear(member.lowestFinish, member.lowestFinishYear)),
     createStat("Average Finish", formatMetric(member.averageFinish)),
     createStat("All Time PPG", formatMetric(member.allTimePpg)),
-    createStat("Points Scored", formatPoints(member.pointsScored)),
-    createStat("Points Against", formatPoints(member.pointsAgainst))
+    createStat("All Time Points Scored", formatPoints(member.allTimePointsScored)),
+    createStat("All Time Points Against", formatPoints(member.allTimePointsAgainst))
   );
 
   card.append(header, stats);

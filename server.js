@@ -1,4 +1,5 @@
 const path = require("path");
+const fs = require("fs/promises");
 require("dotenv").config();
 const express = require("express");
 
@@ -11,7 +12,10 @@ const HISTORICAL_LEAGUE_IDS = (process.env.HISTORICAL_LEAGUE_IDS || "")
   .split(",")
   .map((id) => id.trim())
   .filter(Boolean);
+const VOTES_DIR = path.join(__dirname, "data");
+const VOTES_FILE = path.join(VOTES_DIR, "matchup-votes.json");
 
+app.use(express.json());
 app.use(express.static(__dirname));
 
 function requireLeagueId(res) {
@@ -59,6 +63,156 @@ function buildAvatarUrl(avatar) {
   }
 
   return `${SLEEPER_CDN_BASE_URL}/avatars/${normalized}`;
+}
+
+function toSafeNumber(value, fallback = 0) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+function getTeamNameFromRoster(roster, user) {
+  const rosterMeta = roster?.metadata || {};
+  const userMeta = user?.metadata || {};
+  return (
+    rosterMeta.team_name ||
+    userMeta.team_name ||
+    user?.display_name ||
+    `Team ${roster?.roster_id || "?"}`
+  );
+}
+
+function extractProjection(matchupEntry) {
+  if (!matchupEntry || typeof matchupEntry !== "object") {
+    return 0;
+  }
+
+  const directProjection = [
+    matchupEntry.projected_points,
+    matchupEntry.points_projected,
+    matchupEntry.proj_points
+  ].find((value) => Number.isFinite(Number(value)));
+  if (directProjection !== undefined) {
+    return Number(directProjection);
+  }
+
+  if (Array.isArray(matchupEntry.starters_projected_points)) {
+    return matchupEntry.starters_projected_points.reduce(
+      (sum, value) => sum + toSafeNumber(value, 0),
+      0
+    );
+  }
+
+  if (matchupEntry.starters_projected_points && typeof matchupEntry.starters_projected_points === "object") {
+    return Object.values(matchupEntry.starters_projected_points).reduce(
+      (sum, value) => sum + toSafeNumber(value, 0),
+      0
+    );
+  }
+
+  return toSafeNumber(matchupEntry.points, 0);
+}
+
+async function readVotesStore() {
+  try {
+    const raw = await fs.readFile(VOTES_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      return parsed;
+    }
+    return { weeks: {} };
+  } catch (error) {
+    return { weeks: {} };
+  }
+}
+
+async function writeVotesStore(store) {
+  await fs.mkdir(VOTES_DIR, { recursive: true });
+  await fs.writeFile(VOTES_FILE, `${JSON.stringify(store, null, 2)}\n`, "utf8");
+}
+
+function ensureWeekBucket(store, season, week) {
+  if (!store.weeks || typeof store.weeks !== "object") {
+    store.weeks = {};
+  }
+
+  const key = `${season}-${week}`;
+  if (!store.weeks[key] || typeof store.weeks[key] !== "object") {
+    store.weeks[key] = { matchups: {} };
+  }
+  if (!store.weeks[key].matchups || typeof store.weeks[key].matchups !== "object") {
+    store.weeks[key].matchups = {};
+  }
+  return store.weeks[key];
+}
+
+function summarizeMatchupVotes(weekBucket, matchupId, clientId) {
+  const matchupKey = String(matchupId);
+  const matchupBucket = weekBucket?.matchups?.[matchupKey];
+  const votesByClient =
+    matchupBucket && typeof matchupBucket.votesByClient === "object"
+      ? matchupBucket.votesByClient
+      : {};
+
+  const counts = {};
+  Object.values(votesByClient).forEach((rosterId) => {
+    const key = String(rosterId);
+    counts[key] = (counts[key] || 0) + 1;
+  });
+
+  const clientVote = clientId ? votesByClient[clientId] || null : null;
+  return { counts, clientVote };
+}
+
+function formatWinLossTie(wins = 0, losses = 0, ties = 0) {
+  const w = Number(wins || 0);
+  const l = Number(losses || 0);
+  const t = Number(ties || 0);
+  return t > 0 ? `${w}-${l}-${t}` : `${w}-${l}`;
+}
+
+function getDivisionId(roster) {
+  const settingsDivision = Number(roster?.settings?.division);
+  if (Number.isFinite(settingsDivision) && settingsDivision > 0) {
+    return settingsDivision;
+  }
+  const metadataDivision = Number(roster?.metadata?.division);
+  if (Number.isFinite(metadataDivision) && metadataDivision > 0) {
+    return metadataDivision;
+  }
+  return null;
+}
+
+function addRecordResult(recordBucket, outcome) {
+  if (outcome === "W") {
+    recordBucket.wins += 1;
+  } else if (outcome === "L") {
+    recordBucket.losses += 1;
+  } else if (outcome === "T") {
+    recordBucket.ties += 1;
+  }
+}
+
+function getLeagueWeekContext(league, state) {
+  const leagueSeason = String(league?.season || state?.season || new Date().getFullYear());
+  const stateSeason = String(state?.season || "");
+  const liveWeek = Math.max(1, Number(state?.week || 1));
+  const playoffWeekStart = Number(league?.settings?.playoff_week_start || 18);
+  const regularSeasonMaxWeek = Math.max(1, playoffWeekStart - 1);
+  const isCurrentSeason = leagueSeason === stateSeason;
+
+  const defaultWeek = isCurrentSeason ? Math.min(liveWeek, regularSeasonMaxWeek) : regularSeasonMaxWeek;
+  const availableWeeks = Array.from({ length: regularSeasonMaxWeek }, (_, i) => i + 1);
+
+  return {
+    leagueSeason,
+    stateSeason,
+    isCurrentSeason,
+    liveWeek,
+    playoffWeekStart,
+    regularSeasonMaxWeek,
+    defaultWeek,
+    availableWeeks
+  };
 }
 
 function calculateBaselineFinishByRosterId(rosters = []) {
@@ -420,6 +574,306 @@ async function fetchSleeperJson(url) {
   return response.json();
 }
 
+app.get("/api/matchups/current-week", async (req, res) => {
+  if (!requireLeagueId(res)) {
+    return;
+  }
+
+  try {
+    const [league, users, rosters, state] = await Promise.all([
+      fetchSleeperJson(`${SLEEPER_BASE_URL}/league/${LEAGUE_ID}`),
+      fetchSleeperJson(`${SLEEPER_BASE_URL}/league/${LEAGUE_ID}/users`),
+      fetchSleeperJson(`${SLEEPER_BASE_URL}/league/${LEAGUE_ID}/rosters`),
+      fetchSleeperJson(`${SLEEPER_BASE_URL}/state/nfl`)
+    ]);
+
+    const weekContext = getLeagueWeekContext(league, state);
+    const season = weekContext.leagueSeason;
+    const requestedWeek = Number(req.query.week || weekContext.defaultWeek);
+    const week =
+      Number.isFinite(requestedWeek) && requestedWeek > 0
+        ? Math.min(Math.max(requestedWeek, 1), weekContext.regularSeasonMaxWeek)
+        : weekContext.defaultWeek;
+    const clientId = String(req.query.clientId || "").trim() || null;
+
+    const weeklyMatchups = await fetchSleeperJson(
+      `${SLEEPER_BASE_URL}/league/${LEAGUE_ID}/matchups/${week}`
+    );
+
+    const usersById = new Map(users.map((user) => [user.user_id, user]));
+    const rostersById = new Map(rosters.map((roster) => [Number(roster.roster_id), roster]));
+
+    const groupedByMatchupId = new Map();
+    weeklyMatchups.forEach((entry) => {
+      const matchupId = Number(entry.matchup_id || 0);
+      if (!matchupId) {
+        return;
+      }
+
+      const existing = groupedByMatchupId.get(matchupId) || [];
+      existing.push(entry);
+      groupedByMatchupId.set(matchupId, existing);
+    });
+
+    const votesStore = await readVotesStore();
+    const weekBucket = ensureWeekBucket(votesStore, season, week);
+
+    const matchups = Array.from(groupedByMatchupId.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([matchupId, entries]) => {
+        const teams = entries
+          .map((entry) => {
+            const rosterId = Number(entry.roster_id || 0);
+            const roster = rostersById.get(rosterId) || {};
+            const user = usersById.get(roster.owner_id) || {};
+            return {
+              rosterId,
+              teamName: getTeamNameFromRoster(roster, user),
+              managerName: user.display_name || user.username || "Unknown Manager",
+              currentPoints: Number(toSafeNumber(entry.points, 0).toFixed(2)),
+              projectedPoints: Number(extractProjection(entry).toFixed(2))
+            };
+          })
+          .sort((left, right) => left.rosterId - right.rosterId);
+
+        const voteSummary = summarizeMatchupVotes(weekBucket, matchupId, clientId);
+        return {
+          matchupId,
+          teams,
+          voteSummary
+        };
+      });
+
+    res.json({
+      leagueId: LEAGUE_ID,
+      season,
+      week,
+      availableWeeks: weekContext.availableWeeks,
+      count: matchups.length,
+      matchups
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(502).json({
+      error: "Failed to fetch current-week matchups.",
+      message: error.message
+    });
+  }
+});
+
+app.post("/api/matchups/vote", async (req, res) => {
+  if (!requireLeagueId(res)) {
+    return;
+  }
+
+  try {
+    const season = String(req.body?.season || "").trim();
+    const week = Number(req.body?.week || 0);
+    const matchupId = Number(req.body?.matchupId || 0);
+    const rosterId = Number(req.body?.rosterId || 0);
+    const clientId = String(req.body?.clientId || "").trim();
+
+    if (!season || !week || !matchupId || !clientId) {
+      res.status(400).json({
+        error: "Invalid vote payload.",
+        message: "season, week, matchupId, and clientId are required."
+      });
+      return;
+    }
+
+    const store = await readVotesStore();
+    const weekBucket = ensureWeekBucket(store, season, week);
+    const matchupKey = String(matchupId);
+    if (!weekBucket.matchups[matchupKey] || typeof weekBucket.matchups[matchupKey] !== "object") {
+      weekBucket.matchups[matchupKey] = { votesByClient: {} };
+    }
+    if (
+      !weekBucket.matchups[matchupKey].votesByClient ||
+      typeof weekBucket.matchups[matchupKey].votesByClient !== "object"
+    ) {
+      weekBucket.matchups[matchupKey].votesByClient = {};
+    }
+
+    if (rosterId > 0) {
+      weekBucket.matchups[matchupKey].votesByClient[clientId] = rosterId;
+    } else {
+      delete weekBucket.matchups[matchupKey].votesByClient[clientId];
+    }
+
+    await writeVotesStore(store);
+    const summary = summarizeMatchupVotes(weekBucket, matchupId, clientId);
+    res.json({
+      matchupId,
+      week,
+      season,
+      counts: summary.counts,
+      clientVote: summary.clientVote
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: "Failed to save vote.",
+      message: error.message
+    });
+  }
+});
+
+app.get("/api/team-stats", async (req, res) => {
+  if (!requireLeagueId(res)) {
+    return;
+  }
+
+  try {
+    const [league, users, rosters, state] = await Promise.all([
+      fetchSleeperJson(`${SLEEPER_BASE_URL}/league/${LEAGUE_ID}`),
+      fetchSleeperJson(`${SLEEPER_BASE_URL}/league/${LEAGUE_ID}/users`),
+      fetchSleeperJson(`${SLEEPER_BASE_URL}/league/${LEAGUE_ID}/rosters`),
+      fetchSleeperJson(`${SLEEPER_BASE_URL}/state/nfl`)
+    ]);
+
+    const season = String(league.season || state.season || new Date().getFullYear());
+    const currentWeek = Math.max(1, Number(state.week || 1));
+    const playoffWeekStart = Number(league?.settings?.playoff_week_start || 18);
+    const completedRegularSeasonWeek = Math.max(
+      0,
+      Math.min(currentWeek - 1, playoffWeekStart - 1)
+    );
+
+    const usersById = new Map(users.map((user) => [user.user_id, user]));
+    const divisionRecordByRosterId = new Map(
+      rosters.map((roster) => [Number(roster.roster_id), { wins: 0, losses: 0, ties: 0 }])
+    );
+    const divisionByRosterId = new Map(
+      rosters.map((roster) => [Number(roster.roster_id), getDivisionId(roster)])
+    );
+
+    for (let week = 1; week <= completedRegularSeasonWeek; week += 1) {
+      const weekMatchups = await fetchSleeperJson(
+        `${SLEEPER_BASE_URL}/league/${LEAGUE_ID}/matchups/${week}`
+      );
+      const groupedByMatchupId = new Map();
+      weekMatchups.forEach((entry) => {
+        const matchupId = Number(entry.matchup_id || 0);
+        if (!matchupId) {
+          return;
+        }
+        const existing = groupedByMatchupId.get(matchupId) || [];
+        existing.push(entry);
+        groupedByMatchupId.set(matchupId, existing);
+      });
+
+      groupedByMatchupId.forEach((entries) => {
+        if (entries.length !== 2) {
+          return;
+        }
+
+        const left = entries[0];
+        const right = entries[1];
+        const leftRosterId = Number(left.roster_id || 0);
+        const rightRosterId = Number(right.roster_id || 0);
+        if (!leftRosterId || !rightRosterId) {
+          return;
+        }
+
+        const leftDivision = divisionByRosterId.get(leftRosterId);
+        const rightDivision = divisionByRosterId.get(rightRosterId);
+        if (!leftDivision || !rightDivision || leftDivision !== rightDivision) {
+          return;
+        }
+
+        const leftPoints = Number(left.points);
+        const rightPoints = Number(right.points);
+        if (!Number.isFinite(leftPoints) || !Number.isFinite(rightPoints)) {
+          return;
+        }
+
+        const leftRecord = divisionRecordByRosterId.get(leftRosterId);
+        const rightRecord = divisionRecordByRosterId.get(rightRosterId);
+        if (!leftRecord || !rightRecord) {
+          return;
+        }
+
+        if (leftPoints > rightPoints) {
+          addRecordResult(leftRecord, "W");
+          addRecordResult(rightRecord, "L");
+        } else if (leftPoints < rightPoints) {
+          addRecordResult(leftRecord, "L");
+          addRecordResult(rightRecord, "W");
+        } else {
+          addRecordResult(leftRecord, "T");
+          addRecordResult(rightRecord, "T");
+        }
+      });
+    }
+
+    const teams = rosters
+      .map((roster) => {
+        const rosterId = Number(roster.roster_id || 0);
+        const user = usersById.get(roster.owner_id) || {};
+        const settings = roster.settings || {};
+        const divisionId = getDivisionId(roster);
+        const divisionRecord = divisionRecordByRosterId.get(rosterId) || {
+          wins: 0,
+          losses: 0,
+          ties: 0
+        };
+
+        const leagueWins = Number(settings.wins || 0);
+        const leagueLosses = Number(settings.losses || 0);
+        const leagueTies = Number(settings.ties || 0);
+        const pointsScored = toPoints(settings.fpts, settings.fpts_decimal);
+        const pointsAgainst = toPoints(settings.fpts_against, settings.fpts_against_decimal);
+
+        return {
+          rosterId,
+          teamName: getTeamNameFromRoster(roster, user),
+          managerName: user.display_name || user.username || "Unknown Manager",
+          avatarUrl: buildAvatarUrl(user.avatar),
+          divisionId,
+          leagueRecord: formatWinLossTie(leagueWins, leagueLosses, leagueTies),
+          divisionRecord: divisionId
+            ? formatWinLossTie(divisionRecord.wins, divisionRecord.losses, divisionRecord.ties)
+            : null,
+          leagueWins,
+          leagueLosses,
+          leagueTies,
+          pointsScored: Number(pointsScored.toFixed(2)),
+          pointsAgainst: Number(pointsAgainst.toFixed(2))
+        };
+      })
+      .sort((left, right) => {
+        if (right.leagueWins !== left.leagueWins) {
+          return right.leagueWins - left.leagueWins;
+        }
+        if (left.leagueLosses !== right.leagueLosses) {
+          return left.leagueLosses - right.leagueLosses;
+        }
+        if (right.leagueTies !== left.leagueTies) {
+          return right.leagueTies - left.leagueTies;
+        }
+        if (right.pointsScored !== left.pointsScored) {
+          return right.pointsScored - left.pointsScored;
+        }
+        return left.teamName.localeCompare(right.teamName);
+      });
+
+    res.json({
+      leagueId: LEAGUE_ID,
+      season,
+      currentWeek,
+      completedRegularSeasonWeek,
+      count: teams.length,
+      teams
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(502).json({
+      error: "Failed to fetch team stats.",
+      message: error.message
+    });
+  }
+});
+
 app.get("/api/members", async (req, res) => {
   if (!requireLeagueId(res)) {
     return;
@@ -474,6 +928,7 @@ app.get("/api/members", async (req, res) => {
         const losses = Number(settings.losses || 0);
         const ties = Number(settings.ties || 0);
         const pointsScored = toPoints(settings.fpts, settings.fpts_decimal);
+        const pointsAgainst = toPoints(settings.fpts_against, settings.fpts_against_decimal);
         const gamesPlayed = wins + losses + ties;
         const rosterId = Number(historicalRoster.roster_id || 0);
         const regularSeasonFinish = baselineFinishByRosterId.get(rosterId) || 0;
@@ -487,6 +942,7 @@ app.get("/api/members", async (req, res) => {
           losses,
           ties,
           pointsScored,
+          pointsAgainst,
           gamesPlayed,
           regularSeasonFinish: Number(regularSeasonFinish || 0),
           championshipFinish: championshipFinish ? Number(championshipFinish) : null
@@ -506,6 +962,7 @@ app.get("/api/members", async (req, res) => {
       const championshipFinishes = [];
       const regularSeasonFinishes = [];
       let allTimePointsScored = 0;
+      let allTimePointsAgainst = 0;
       let allTimeGamesPlayed = 0;
 
       historicalLeagueSummaries.forEach((seasonEntries) => {
@@ -518,6 +975,7 @@ app.get("/api/members", async (req, res) => {
         allTimeParts.losses += matchedEntry.losses;
         allTimeParts.ties += matchedEntry.ties;
         allTimePointsScored += matchedEntry.pointsScored;
+        allTimePointsAgainst += matchedEntry.pointsAgainst;
         allTimeGamesPlayed += matchedEntry.gamesPlayed;
         if (matchedEntry.championshipFinish && matchedEntry.championshipFinish > 0) {
           championshipFinishes.push({
@@ -535,6 +993,8 @@ app.get("/api/members", async (req, res) => {
 
       const pointsScored = toPoints(settings.fpts, settings.fpts_decimal);
       const pointsAgainst = toPoints(settings.fpts_against, settings.fpts_against_decimal);
+      const fullAllTimePointsScored = allTimePointsScored + pointsScored;
+      const fullAllTimePointsAgainst = allTimePointsAgainst + pointsAgainst;
       const averageFinish =
         regularSeasonFinishes.length > 0
           ? regularSeasonFinishes.reduce((sum, value) => sum + value.finish, 0) /
@@ -589,7 +1049,9 @@ app.get("/api/members", async (req, res) => {
         losses: Number(settings.losses || 0),
         ties: Number(settings.ties || 0),
         pointsScored,
-        pointsAgainst
+        pointsAgainst,
+        allTimePointsScored: Number(fullAllTimePointsScored.toFixed(2)),
+        allTimePointsAgainst: Number(fullAllTimePointsAgainst.toFixed(2))
       };
     });
 

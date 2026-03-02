@@ -130,6 +130,29 @@ body {
   margin-top: 16px;
 }
 
+.filters-row {
+  margin-top: 14px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.filter-control {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.filter-control select {
+  min-width: 180px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fffdfa;
+  color: var(--text);
+}
+
 .badge {
   background: var(--accent-soft);
   color: #6e3f1b;
@@ -240,6 +263,109 @@ body {
   gap: 16px;
 }
 
+.matchups-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.matchup-card {
+  padding: 18px;
+}
+
+.matchup-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.matchup-card-header h3 {
+  margin: 0;
+}
+
+.matchup-teams {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.matchup-team {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-alt);
+  padding: 14px;
+}
+
+.matchup-team h4 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.matchup-manager {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.matchup-metrics {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.matchup-metric {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fffdfa;
+  padding: 8px;
+}
+
+.matchup-metric .label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.matchup-metric .value {
+  margin: 6px 0 0;
+  font-weight: 700;
+}
+
+.vote-row {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vote-btn {
+  border: 1px solid #bfd2d6;
+  background: #f5fbfd;
+  color: #163f48;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+
+.vote-btn:hover {
+  background: #e6f3f7;
+}
+
+.vote-btn.active {
+  background: #d6ebf0;
+  border-color: #8bb1ba;
+}
+
+.vote-count {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .member-card {
   padding: 22px;
 }
@@ -307,6 +433,18 @@ body {
   background: #e6f3f7;
 }
 
+.table-manager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.table-avatar-wrap {
+  width: 34px;
+  height: 34px;
+  border-width: 1px;
+}
+
 .member-stats {
   margin-top: 18px;
   display: grid;
@@ -352,6 +490,17 @@ body {
   .member-head {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .matchup-card-header,
+  .matchup-teams,
+  .matchup-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .matchup-card-header {
+    align-items: flex-start;
+    display: grid;
   }
 
   .manager-meta {
