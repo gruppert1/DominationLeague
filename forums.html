@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Domination League | Forums</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="auth.js" defer></script>
+</head>
+<body>
+  <div class="site-shell">
+    <header class="site-header">
+      <h1 class="league-title">Domination League</h1>
+      <p class="league-subtitle">League Forums</p>
+      <nav class="tab-nav" aria-label="Main tabs">
+        <a class="tab-link" href="index.html">Home</a>
+        <a class="tab-link" href="matchups.html">Matchups</a>
+        <a class="tab-link" href="team-stats.html">Team Stats</a>
+        <a class="tab-link active" href="forums.html">Forums</a>
+        <a class="tab-link" href="members.html">Members</a>
+      </nav>
+    </header>
+
+    <main class="main-content">
+      <section class="panel">
+        <h2>Forums</h2>
+        <p class="lead">Create posts and comments in league forum channels with persistent storage.</p>
+
+        <div class="forum-auth panel-subsection">
+          <p class="footer-note">Signed in as <strong id="forum-current-user">...</strong></p>
+          <p id="forum-post-permission" class="footer-note"></p>
+          <p class="footer-note">Use the Home page to log out.</p>
+        </div>
+
+        <p id="forums-status" class="footer-note">Loading forums...</p>
+
+        <div class="forum-tabs" role="tablist" aria-label="Forum channels">
+          <button type="button" class="forum-tab active" data-forum-tab="announcements" role="tab" aria-selected="true">General Announcements</button>
+          <button type="button" class="forum-tab" data-forum-tab="weekly-reports" role="tab" aria-selected="false">Weekly Reports</button>
+        </div>
+
+        <form id="forum-post-form" class="forum-post-form panel-subsection" hidden>
+          <h3>New Post</h3>
+          <label class="filter-control">
+            <span>Title</span>
+            <input id="forum-post-title" type="text" maxlength="180" required>
+          </label>
+          <label class="filter-control">
+            <span>Content</span>
+            <textarea id="forum-post-content" rows="5" required></textarea>
+          </label>
+          <button type="submit" class="forum-action-btn">Publish Post</button>
+        </form>
+
+        <section id="forums-posts" class="forum-panel active" role="tabpanel" aria-live="polite"></section>
+      </section>
+    </main>
+  </div>
+
+  <script src="forums.js"></script>
+</body>
+</html>

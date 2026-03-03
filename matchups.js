@@ -1,21 +1,4 @@
-function getClientId() {
-  const key = "domination-league-client-id";
-  try {
-    const existing = window.localStorage.getItem(key);
-    if (existing) {
-      return existing;
-    }
-
-    const generated =
-      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-        ? crypto.randomUUID()
-        : `client-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    window.localStorage.setItem(key, generated);
-    return generated;
-  } catch (error) {
-    return `ephemeral-${Date.now()}`;
-  }
-}
+const FORUM_TOKEN_KEY = "domination-league-forum-token";
 
 function formatPoints(value) {
   return Number(value || 0).toFixed(2);
@@ -23,6 +6,15 @@ function formatPoints(value) {
 
 function formatWinPct(value) {
   return `${Number(value || 0).toFixed(1)}%`;
+}
+
+function authHeaders() {
+  const token = window.localStorage.getItem(FORUM_TOKEN_KEY);
+  const headers = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
 }
 
 function getVotePercentage(voteSummary, rosterId) {
@@ -40,7 +32,10 @@ function getVotePercentage(voteSummary, rosterId) {
 async function submitVote(payload) {
   const response = await fetch("/api/matchups/vote", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders()
+    },
     body: JSON.stringify(payload)
   });
   const data = await response.json();
@@ -52,7 +47,7 @@ async function submitVote(payload) {
   return data;
 }
 
-function buildTeamPanel(team, voteSummary, matchContext, clientId) {
+function buildTeamPanel(team, voteSummary, matchContext) {
   const panel = document.createElement("article");
   panel.className = "matchup-team";
 
@@ -69,7 +64,7 @@ function buildTeamPanel(team, voteSummary, matchContext, clientId) {
   const rows = [
     ["Projected", formatPoints(team.projectedPoints)],
     ["Current", formatPoints(team.currentPoints)],
-    ["Win %", formatWinPct(getVotePercentage(voteSummary, team.rosterId))]
+    ["Vote %", formatWinPct(getVotePercentage(voteSummary, team.rosterId))]
   ];
 
   rows.forEach(([label, value]) => {
@@ -101,7 +96,7 @@ function buildTeamPanel(team, voteSummary, matchContext, clientId) {
   voteCount.className = "vote-count";
   voteCount.textContent = `${count} votes`;
 
-  const selected = Number(voteSummary?.clientVote || 0) === Number(team.rosterId);
+  const selected = Number(voteSummary?.userVote || 0) === Number(team.rosterId);
   if (selected) {
     voteButton.classList.add("active");
   }
@@ -116,15 +111,14 @@ function buildTeamPanel(team, voteSummary, matchContext, clientId) {
         season: matchContext.season,
         week: matchContext.week,
         matchupId: matchContext.matchupId,
-        rosterId: nextRosterId,
-        clientId
+        rosterId: nextRosterId
       });
 
-      matchContext.voteSummary = {
+      const updatedSummary = {
         counts: updated.counts || {},
-        clientVote: updated.clientVote || null
+        userVote: updated.userVote || null
       };
-      matchContext.rerender();
+      matchContext.onVoteUpdate(matchContext.matchupId, updatedSummary);
     } catch (error) {
       const status = document.getElementById("matchups-status");
       status.textContent = `Vote failed: ${error.message}`;
@@ -139,7 +133,7 @@ function buildTeamPanel(team, voteSummary, matchContext, clientId) {
   return panel;
 }
 
-function renderMatchupCard(matchup, season, week, clientId, rerender) {
+function renderMatchupCard(matchup, season, week, onVoteUpdate) {
   const card = document.createElement("section");
   card.className = "matchup-card panel";
 
@@ -158,16 +152,15 @@ function renderMatchupCard(matchup, season, week, clientId, rerender) {
     season,
     week,
     matchupId: matchup.matchupId,
-    voteSummary: matchup.voteSummary,
-    rerender
+    onVoteUpdate
   };
 
   if (leftTeam) {
-    teamsWrap.append(buildTeamPanel(leftTeam, matchup.voteSummary, context, clientId));
+    teamsWrap.append(buildTeamPanel(leftTeam, matchup.voteSummary, context));
   }
 
   if (rightTeam) {
-    teamsWrap.append(buildTeamPanel(rightTeam, matchup.voteSummary, context, clientId));
+    teamsWrap.append(buildTeamPanel(rightTeam, matchup.voteSummary, context));
   }
 
   card.append(header, teamsWrap);
@@ -178,15 +171,16 @@ async function loadMatchups() {
   const status = document.getElementById("matchups-status");
   const grid = document.getElementById("matchups-grid");
   const weekFilter = document.getElementById("matchups-week-filter");
-  const clientId = getClientId();
   const selectedWeek = weekFilter.value || "";
 
   try {
-    const query = new URLSearchParams({ clientId });
+    const query = new URLSearchParams();
     if (selectedWeek) {
       query.set("week", selectedWeek);
     }
-    const response = await fetch(`/api/matchups/current-week?${query.toString()}`);
+    const response = await fetch(`/api/matchups/current-week?${query.toString()}`, {
+      headers: authHeaders()
+    });
     const data = await response.json();
 
     if (!response.ok) {
@@ -222,8 +216,16 @@ async function loadMatchups() {
     const rerender = () => {
       grid.innerHTML = "";
       state.matchups.forEach((matchup) => {
-        grid.append(renderMatchupCard(matchup, state.season, state.week, clientId, rerender));
+        grid.append(renderMatchupCard(matchup, state.season, state.week, onVoteUpdate));
       });
+    };
+
+    const onVoteUpdate = (matchupId, updatedSummary) => {
+      const target = state.matchups.find((entry) => Number(entry.matchupId) === Number(matchupId));
+      if (target) {
+        target.voteSummary = updatedSummary;
+      }
+      rerender();
     };
 
     rerender();

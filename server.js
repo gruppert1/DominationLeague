@@ -1,7 +1,10 @@
 const path = require("path");
 const fs = require("fs/promises");
+const crypto = require("crypto");
 require("dotenv").config();
 const express = require("express");
+const bcrypt = require("bcryptjs");
+const { Pool } = require("pg");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -14,6 +17,15 @@ const HISTORICAL_LEAGUE_IDS = (process.env.HISTORICAL_LEAGUE_IDS || "")
   .filter(Boolean);
 const VOTES_DIR = path.join(__dirname, "data");
 const VOTES_FILE = path.join(VOTES_DIR, "matchup-votes.json");
+const FORUM_SESSION_TTL_HOURS = Number(process.env.FORUM_SESSION_TTL_HOURS || 720);
+const FORUM_POSTER_USERNAME = "gaberupps";
+const forumDbPool = new Pool({
+  host: process.env.POSTGRES_HOST || "localhost",
+  port: Number(process.env.POSTGRES_PORT || 5432),
+  database: process.env.POSTGRES_DB || "domination_league",
+  user: process.env.POSTGRES_USER || "domination_app",
+  password: process.env.POSTGRES_PASSWORD || "domination_pass"
+});
 
 app.use(express.json());
 app.use(express.static(__dirname));
@@ -28,6 +40,69 @@ function requireLeagueId(res) {
   }
 
   return true;
+}
+
+function getAuthTokenFromRequest(req) {
+  const header = String(req.headers.authorization || "");
+  if (!header.startsWith("Bearer ")) {
+    return null;
+  }
+  const token = header.slice("Bearer ".length).trim();
+  return token || null;
+}
+
+function normalizeForumChannel(channel) {
+  const normalized = String(channel || "").trim().toLowerCase();
+  if (normalized === "announcements" || normalized === "weekly-reports") {
+    return normalized;
+  }
+  return null;
+}
+
+function canForumUserPost(username) {
+  return String(username || "").trim().toLowerCase() === FORUM_POSTER_USERNAME;
+}
+
+async function resolveForumSessionUser(req) {
+  const token = getAuthTokenFromRequest(req);
+  if (!token) {
+    return null;
+  }
+
+  const query = `
+    SELECT fu.id, fu.username
+    FROM forum_sessions fs
+    JOIN forum_users fu ON fu.id = fs.user_id
+    WHERE fs.token = $1
+      AND fs.expires_at > NOW()
+    LIMIT 1;
+  `;
+  const { rows } = await forumDbPool.query(query, [token]);
+  if (!rows.length) {
+    return null;
+  }
+  return { token, user: rows[0] };
+}
+
+async function requireForumSessionUser(req, res) {
+  try {
+    const session = await resolveForumSessionUser(req);
+    if (!session) {
+      res.status(401).json({
+        error: "Authentication required.",
+        message: "Login with a forum account first."
+      });
+      return null;
+    }
+    return session;
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: "Failed to validate session.",
+      message: error.message
+    });
+    return null;
+  }
 }
 
 function toPoints(whole, decimal) {
@@ -145,22 +220,33 @@ function ensureWeekBucket(store, season, week) {
   return store.weeks[key];
 }
 
-function summarizeMatchupVotes(weekBucket, matchupId, clientId) {
+function summarizeMatchupVotes(weekBucket, matchupId, userId) {
   const matchupKey = String(matchupId);
   const matchupBucket = weekBucket?.matchups?.[matchupKey];
-  const votesByClient =
+  const votesByUserId =
+    matchupBucket && typeof matchupBucket.votesByUserId === "object"
+      ? matchupBucket.votesByUserId
+      : {};
+  const legacyVotesByClient =
     matchupBucket && typeof matchupBucket.votesByClient === "object"
       ? matchupBucket.votesByClient
       : {};
 
   const counts = {};
-  Object.values(votesByClient).forEach((rosterId) => {
+  Object.values(votesByUserId).forEach((rosterId) => {
     const key = String(rosterId);
     counts[key] = (counts[key] || 0) + 1;
   });
 
-  const clientVote = clientId ? votesByClient[clientId] || null : null;
-  return { counts, clientVote };
+  if (!Object.keys(counts).length) {
+    Object.values(legacyVotesByClient).forEach((rosterId) => {
+      const key = String(rosterId);
+      counts[key] = (counts[key] || 0) + 1;
+    });
+  }
+
+  const userVote = userId ? votesByUserId[String(userId)] || null : null;
+  return { counts, userVote };
 }
 
 function formatWinLossTie(wins = 0, losses = 0, ties = 0) {
@@ -574,8 +660,375 @@ async function fetchSleeperJson(url) {
   return response.json();
 }
 
+app.post("/api/forums/login", async (req, res) => {
+  try {
+    const username = String(req.body?.username || "").trim();
+    const password = String(req.body?.password || "");
+
+    if (!username || !password) {
+      res.status(400).json({
+        error: "Invalid credentials payload.",
+        message: "username and password are required."
+      });
+      return;
+    }
+
+    const userResult = await forumDbPool.query(
+      `
+        SELECT id, username, password_hash
+        FROM forum_users
+        WHERE LOWER(username) = LOWER($1)
+        LIMIT 1;
+      `,
+      [username]
+    );
+    if (!userResult.rows.length) {
+      res.status(401).json({ error: "Invalid username or password." });
+      return;
+    }
+
+    const user = userResult.rows[0];
+    const matches = await bcrypt.compare(password, user.password_hash);
+    if (!matches) {
+      res.status(401).json({ error: "Invalid username or password." });
+      return;
+    }
+
+    const token = crypto.randomBytes(32).toString("hex");
+    const ttlHours = Number.isFinite(FORUM_SESSION_TTL_HOURS) ? FORUM_SESSION_TTL_HOURS : 720;
+    await forumDbPool.query(
+      `
+        INSERT INTO forum_sessions (token, user_id, expires_at)
+        VALUES ($1, $2, NOW() + ($3 * INTERVAL '1 hour'));
+      `,
+      [token, user.id, ttlHours]
+    );
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        canPost: canForumUserPost(user.username)
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: "Login failed.",
+      message: error.message
+    });
+  }
+});
+
+app.post("/api/forums/logout", async (req, res) => {
+  try {
+    const token = getAuthTokenFromRequest(req);
+    if (token) {
+      await forumDbPool.query("DELETE FROM forum_sessions WHERE token = $1;", [token]);
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: "Logout failed.",
+      message: error.message
+    });
+  }
+});
+
+app.get("/api/forums/me", async (req, res) => {
+  const session = await requireForumSessionUser(req, res);
+  if (!session) {
+    return;
+  }
+
+  res.json({
+    user: {
+      ...session.user,
+      canPost: canForumUserPost(session.user.username)
+    }
+  });
+});
+
+app.get("/api/forums/posts", async (req, res) => {
+  try {
+    const channel = normalizeForumChannel(req.query.channel || "announcements");
+    if (!channel) {
+      res.status(400).json({
+        error: "Invalid channel.",
+        message: "channel must be announcements or weekly-reports."
+      });
+      return;
+    }
+
+    const query = `
+      SELECT
+        fp.id,
+        fp.channel,
+        fp.title,
+        fp.content,
+        fp.created_at,
+        fp.updated_at,
+        fu.username AS author_username,
+        COALESCE(
+          JSON_AGG(
+            JSON_BUILD_OBJECT(
+              'id', fc.id,
+              'content', fc.content,
+              'createdAt', fc.created_at,
+              'authorUsername', fcu.username
+            )
+            ORDER BY fc.created_at ASC
+          ) FILTER (WHERE fc.id IS NOT NULL),
+          '[]'::json
+        ) AS comments
+      FROM forum_posts fp
+      JOIN forum_users fu ON fu.id = fp.author_user_id
+      LEFT JOIN forum_comments fc ON fc.post_id = fp.id
+      LEFT JOIN forum_users fcu ON fcu.id = fc.author_user_id
+      WHERE fp.channel = $1
+      GROUP BY fp.id, fu.username
+      ORDER BY fp.created_at DESC;
+    `;
+
+    const { rows } = await forumDbPool.query(query, [channel]);
+    const posts = rows.map((row) => ({
+      id: row.id,
+      channel: row.channel,
+      title: row.title,
+      content: row.content,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      authorUsername: row.author_username,
+      comments: Array.isArray(row.comments) ? row.comments : []
+    }));
+
+    res.json({ channel, count: posts.length, posts });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: "Failed to load forum posts.",
+      message: error.message
+    });
+  }
+});
+
+app.post("/api/forums/posts", async (req, res) => {
+  const session = await requireForumSessionUser(req, res);
+  if (!session) {
+    return;
+  }
+
+  try {
+    if (!canForumUserPost(session.user.username)) {
+      res.status(403).json({
+        error: "Insufficient permissions.",
+        message: `Only ${FORUM_POSTER_USERNAME} can create forum posts.`
+      });
+      return;
+    }
+
+    const channel = normalizeForumChannel(req.body?.channel);
+    const title = String(req.body?.title || "").trim();
+    const content = String(req.body?.content || "").trim();
+
+    if (!channel || !title || !content) {
+      res.status(400).json({
+        error: "Invalid post payload.",
+        message: "channel, title, and content are required."
+      });
+      return;
+    }
+
+    const insert = await forumDbPool.query(
+      `
+        INSERT INTO forum_posts (channel, title, content, author_user_id)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id, channel, title, content, created_at, updated_at;
+      `,
+      [channel, title, content, session.user.id]
+    );
+
+    res.status(201).json({
+      post: {
+        id: insert.rows[0].id,
+        channel: insert.rows[0].channel,
+        title: insert.rows[0].title,
+        content: insert.rows[0].content,
+        createdAt: insert.rows[0].created_at,
+        updatedAt: insert.rows[0].updated_at,
+        authorUsername: session.user.username,
+        comments: []
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: "Failed to create forum post.",
+      message: error.message
+    });
+  }
+});
+
+app.post("/api/forums/posts/:postId/comments", async (req, res) => {
+  const session = await requireForumSessionUser(req, res);
+  if (!session) {
+    return;
+  }
+
+  try {
+    const postId = Number(req.params.postId || 0);
+    const content = String(req.body?.content || "").trim();
+
+    if (!postId || !content) {
+      res.status(400).json({
+        error: "Invalid comment payload.",
+        message: "postId and content are required."
+      });
+      return;
+    }
+
+    const postCheck = await forumDbPool.query(
+      "SELECT id FROM forum_posts WHERE id = $1 LIMIT 1;",
+      [postId]
+    );
+    if (!postCheck.rows.length) {
+      res.status(404).json({ error: "Post not found." });
+      return;
+    }
+
+    const insert = await forumDbPool.query(
+      `
+        INSERT INTO forum_comments (post_id, content, author_user_id)
+        VALUES ($1, $2, $3)
+        RETURNING id, post_id, content, created_at, updated_at;
+      `,
+      [postId, content, session.user.id]
+    );
+
+    res.status(201).json({
+      comment: {
+        id: insert.rows[0].id,
+        postId: insert.rows[0].post_id,
+        content: insert.rows[0].content,
+        createdAt: insert.rows[0].created_at,
+        updatedAt: insert.rows[0].updated_at,
+        authorUsername: session.user.username
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: "Failed to create comment.",
+      message: error.message
+    });
+  }
+});
+
+app.delete("/api/forums/posts/:postId", async (req, res) => {
+  const session = await requireForumSessionUser(req, res);
+  if (!session) {
+    return;
+  }
+
+  try {
+    if (!canForumUserPost(session.user.username)) {
+      res.status(403).json({
+        error: "Insufficient permissions.",
+        message: `Only ${FORUM_POSTER_USERNAME} can delete forum posts.`
+      });
+      return;
+    }
+
+    const postId = Number(req.params.postId || 0);
+    if (!postId) {
+      res.status(400).json({
+        error: "Invalid post id.",
+        message: "postId must be a positive integer."
+      });
+      return;
+    }
+
+    const del = await forumDbPool.query(
+      `
+        DELETE FROM forum_posts
+        WHERE id = $1
+        RETURNING id;
+      `,
+      [postId]
+    );
+
+    if (!del.rows.length) {
+      res.status(404).json({ error: "Post not found." });
+      return;
+    }
+
+    res.json({ success: true, deletedPostId: del.rows[0].id });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: "Failed to delete forum post.",
+      message: error.message
+    });
+  }
+});
+
+app.delete("/api/forums/comments/:commentId", async (req, res) => {
+  const session = await requireForumSessionUser(req, res);
+  if (!session) {
+    return;
+  }
+
+  try {
+    if (!canForumUserPost(session.user.username)) {
+      res.status(403).json({
+        error: "Insufficient permissions.",
+        message: `Only ${FORUM_POSTER_USERNAME} can delete forum comments.`
+      });
+      return;
+    }
+
+    const commentId = Number(req.params.commentId || 0);
+    if (!commentId) {
+      res.status(400).json({
+        error: "Invalid comment id.",
+        message: "commentId must be a positive integer."
+      });
+      return;
+    }
+
+    const del = await forumDbPool.query(
+      `
+        DELETE FROM forum_comments
+        WHERE id = $1
+        RETURNING id;
+      `,
+      [commentId]
+    );
+
+    if (!del.rows.length) {
+      res.status(404).json({ error: "Comment not found." });
+      return;
+    }
+
+    res.json({ success: true, deletedCommentId: del.rows[0].id });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: "Failed to delete forum comment.",
+      message: error.message
+    });
+  }
+});
+
 app.get("/api/matchups/current-week", async (req, res) => {
   if (!requireLeagueId(res)) {
+    return;
+  }
+
+  const session = await requireForumSessionUser(req, res);
+  if (!session) {
     return;
   }
 
@@ -594,8 +1047,6 @@ app.get("/api/matchups/current-week", async (req, res) => {
       Number.isFinite(requestedWeek) && requestedWeek > 0
         ? Math.min(Math.max(requestedWeek, 1), weekContext.regularSeasonMaxWeek)
         : weekContext.defaultWeek;
-    const clientId = String(req.query.clientId || "").trim() || null;
-
     const weeklyMatchups = await fetchSleeperJson(
       `${SLEEPER_BASE_URL}/league/${LEAGUE_ID}/matchups/${week}`
     );
@@ -636,7 +1087,7 @@ app.get("/api/matchups/current-week", async (req, res) => {
           })
           .sort((left, right) => left.rosterId - right.rosterId);
 
-        const voteSummary = summarizeMatchupVotes(weekBucket, matchupId, clientId);
+        const voteSummary = summarizeMatchupVotes(weekBucket, matchupId, session.user.id);
         return {
           matchupId,
           teams,
@@ -666,17 +1117,21 @@ app.post("/api/matchups/vote", async (req, res) => {
     return;
   }
 
+  const session = await requireForumSessionUser(req, res);
+  if (!session) {
+    return;
+  }
+
   try {
     const season = String(req.body?.season || "").trim();
     const week = Number(req.body?.week || 0);
     const matchupId = Number(req.body?.matchupId || 0);
     const rosterId = Number(req.body?.rosterId || 0);
-    const clientId = String(req.body?.clientId || "").trim();
 
-    if (!season || !week || !matchupId || !clientId) {
+    if (!season || !week || !matchupId) {
       res.status(400).json({
         error: "Invalid vote payload.",
-        message: "season, week, matchupId, and clientId are required."
+        message: "season, week, and matchupId are required."
       });
       return;
     }
@@ -685,29 +1140,30 @@ app.post("/api/matchups/vote", async (req, res) => {
     const weekBucket = ensureWeekBucket(store, season, week);
     const matchupKey = String(matchupId);
     if (!weekBucket.matchups[matchupKey] || typeof weekBucket.matchups[matchupKey] !== "object") {
-      weekBucket.matchups[matchupKey] = { votesByClient: {} };
+      weekBucket.matchups[matchupKey] = { votesByUserId: {} };
     }
     if (
-      !weekBucket.matchups[matchupKey].votesByClient ||
-      typeof weekBucket.matchups[matchupKey].votesByClient !== "object"
+      !weekBucket.matchups[matchupKey].votesByUserId ||
+      typeof weekBucket.matchups[matchupKey].votesByUserId !== "object"
     ) {
-      weekBucket.matchups[matchupKey].votesByClient = {};
+      weekBucket.matchups[matchupKey].votesByUserId = {};
     }
 
+    const voterKey = String(session.user.id);
     if (rosterId > 0) {
-      weekBucket.matchups[matchupKey].votesByClient[clientId] = rosterId;
+      weekBucket.matchups[matchupKey].votesByUserId[voterKey] = rosterId;
     } else {
-      delete weekBucket.matchups[matchupKey].votesByClient[clientId];
+      delete weekBucket.matchups[matchupKey].votesByUserId[voterKey];
     }
 
     await writeVotesStore(store);
-    const summary = summarizeMatchupVotes(weekBucket, matchupId, clientId);
+    const summary = summarizeMatchupVotes(weekBucket, matchupId, session.user.id);
     res.json({
       matchupId,
       week,
       season,
       counts: summary.counts,
-      clientVote: summary.clientVote
+      userVote: summary.userVote
     });
   } catch (error) {
     console.error(error);

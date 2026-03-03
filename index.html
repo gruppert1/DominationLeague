@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Domination League | Home</title>
   <link rel="stylesheet" href="styles.css">
+  <script src="auth.js" defer></script>
 </head>
 <body>
   <div class="site-shell">
@@ -15,7 +16,7 @@
         <a class="tab-link active" href="index.html">Home</a>
         <a class="tab-link" href="matchups.html">Matchups</a>
         <a class="tab-link" href="team-stats.html">Team Stats</a>
-        <a class="tab-link" href="blog.html">Blog</a>
+        <a class="tab-link" href="forums.html">Forums</a>
         <a class="tab-link" href="members.html">Members</a>
       </nav>
     </header>
@@ -25,8 +26,12 @@
         <article class="panel">
           <h2>Welcome to the League Dashboard</h2>
           <p class="lead">
-            This is the central frontend for everything in Domination Leauge. Browse weekly matchups, check team stats, and catch up on league updates in the blog tab.
+            This is the central frontend for everything in Domination Leauge. Browse weekly matchups, check team stats, and catch up on league updates in the forums tab.
           </p>
+          <div class="panel-subsection">
+            <p class="footer-note">Signed in as <strong id="home-current-user">...</strong></p>
+            <button type="button" id="home-logout-btn" class="forum-action-btn forum-secondary-btn">Logout</button>
+          </div>
           <div class="badge-row">
             <span class="badge">Sleeper Hosted</span>
             <span class="badge">Member News Feed</span>
@@ -61,5 +66,6 @@
       </section>
     </main>
   </div>
+  <script src="home.js"></script>
 </body>
 </html>

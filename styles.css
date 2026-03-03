@@ -1,15 +1,15 @@
 :root {
-  --bg: #f4efe4;
-  --surface: #fffdf8;
-  --surface-alt: #f8f3e8;
-  --text: #111111;
-  --muted: #5f5b53;
-  --primary: #0f4c5c;
-  --primary-soft: #e0edf0;
-  --accent: #c9732f;
-  --accent-soft: #f8e5d6;
-  --border: #ddd5c7;
-  --shadow: 0 12px 30px rgba(17, 17, 17, 0.08);
+  --bg: #0e1230;
+  --surface: #22294b;
+  --surface-alt: #2b345f;
+  --text: #e8ecff;
+  --muted: #9fb2d8;
+  --primary: #1a2144;
+  --primary-soft: #323f77;
+  --accent: #18e2bb;
+  --accent-soft: #123f45;
+  --border: #3f4f8a;
+  --shadow: 0 14px 34px rgba(5, 8, 22, 0.55);
 }
 
 * {
@@ -21,9 +21,9 @@ body {
   font-family: "Trebuchet MS", "Segoe UI", sans-serif;
   color: var(--text);
   background:
-    radial-gradient(circle at 10% 10%, #fdf8ec 0, transparent 26%),
-    radial-gradient(circle at 85% 20%, #f2ead7 0, transparent 34%),
-    linear-gradient(150deg, #f8f3e7 0%, #f2ebdd 60%, #ece5d8 100%);
+    radial-gradient(circle at 10% 8%, #1c2656 0, transparent 28%),
+    radial-gradient(circle at 88% 12%, #17204a 0, transparent 32%),
+    linear-gradient(160deg, #0c102a 0%, #11183a 45%, #12183a 100%);
   min-height: 100vh;
 }
 
@@ -34,8 +34,8 @@ body {
 }
 
 .site-header {
-  background: linear-gradient(120deg, #0f4c5c 0%, #165f72 65%, #1f6f82 100%);
-  color: #f8f6f2;
+  background: linear-gradient(125deg, #141c40 0%, #1d2752 58%, #1e2a57 100%);
+  color: #eff4ff;
   border-radius: 20px;
   padding: 24px 22px;
   box-shadow: var(--shadow);
@@ -51,7 +51,7 @@ body {
   width: 180px;
   height: 180px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(24, 226, 187, 0.15);
 }
 
 .league-title {
@@ -62,7 +62,7 @@ body {
 
 .league-subtitle {
   margin: 8px 0 0;
-  color: #e2f0f3;
+  color: #a8bde5;
   font-size: 1rem;
 }
 
@@ -75,8 +75,8 @@ body {
 
 .tab-link {
   text-decoration: none;
-  color: #f3f0ea;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #d9e7ff;
+  border: 1px solid #3e4d86;
   padding: 10px 14px;
   border-radius: 999px;
   font-size: 0.95rem;
@@ -84,13 +84,14 @@ body {
 }
 
 .tab-link:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(24, 226, 187, 0.14);
+  border-color: #1cc7a9;
 }
 
 .tab-link.active {
-  background: #f3efe7;
-  color: #153f4b;
-  border-color: #f3efe7;
+  background: #1be4bc;
+  color: #07162a;
+  border-color: #1be4bc;
 }
 
 .main-content {
@@ -149,21 +150,21 @@ body {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 10px;
-  background: #fffdfa;
+  background: #1e2852;
   color: var(--text);
 }
 
 .badge {
   background: var(--accent-soft);
-  color: #6e3f1b;
-  border: 1px solid #ecc4a3;
+  color: #6df9dc;
+  border: 1px solid #1e8072;
   border-radius: 999px;
   font-size: 0.86rem;
   padding: 8px 12px;
 }
 
 .meta-card {
-  background: linear-gradient(170deg, #fcf8ef 0%, #f7f1e4 100%);
+  background: linear-gradient(170deg, #242d56 0%, #20284d 100%);
 }
 
 .meta-list {
@@ -179,7 +180,7 @@ body {
   justify-content: space-between;
   gap: 10px;
   color: var(--muted);
-  border-bottom: 1px dashed #d9cfbf;
+  border-bottom: 1px dashed #495a9a;
   padding-bottom: 8px;
 }
 
@@ -242,13 +243,157 @@ body {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 14px;
-  background: #fffdfa;
+  background: #232d58;
 }
 
 .post-meta {
   margin: 6px 0 0;
   color: var(--muted);
   font-size: 0.88rem;
+}
+
+.forum-tabs {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.forum-tab {
+  border: 1px solid #495ea3;
+  background: #252f5d;
+  color: #d7e5ff;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.forum-tab:hover {
+  border-color: #18e2bb;
+  background: #1e3760;
+}
+
+.forum-tab.active {
+  border-color: #18e2bb;
+  background: #18e2bb;
+  color: #081528;
+}
+
+.forum-panel {
+  margin-top: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.panel-subsection {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #212a53;
+  padding: 14px;
+}
+
+.forum-inline-form,
+.forum-post-form,
+.forum-comment-form {
+  display: grid;
+  gap: 10px;
+}
+
+.forum-inline-form input,
+.forum-post-form input,
+.forum-post-form textarea,
+.forum-comment-form textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #1b2346;
+  color: var(--text);
+}
+
+.forum-action-btn {
+  border: 1px solid #18e2bb;
+  background: #18e2bb;
+  color: #081528;
+  border-radius: 999px;
+  font-weight: 700;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.forum-action-btn:hover {
+  filter: brightness(0.95);
+}
+
+.forum-secondary-btn {
+  background: #123f45;
+  border-color: #2ea793;
+  color: #90ffeb;
+}
+
+.forum-post {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #232d58;
+  padding: 14px;
+}
+
+.forum-post h3 {
+  margin: 0;
+}
+
+.forum-item-title-row,
+.forum-item-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.forum-comments {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.forum-comment-item {
+  border: 1px solid #3f4f8a;
+  border-radius: 10px;
+  background: #1f274f;
+  padding: 10px;
+}
+
+.forum-comment-item p {
+  margin: 0;
+}
+
+.forum-icon-btn {
+  border: 1px solid #415289;
+  background: #1a2348;
+  color: #d2defa;
+  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.forum-icon-btn:hover {
+  border-color: #7f92cf;
+  color: #ffffff;
+}
+
+.forum-icon-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .footer-note {
@@ -318,7 +463,7 @@ body {
 .matchup-metric {
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: #fffdfa;
+  background: #1d2650;
   padding: 8px;
 }
 
@@ -343,9 +488,9 @@ body {
 }
 
 .vote-btn {
-  border: 1px solid #bfd2d6;
-  background: #f5fbfd;
-  color: #163f48;
+  border: 1px solid #2ea793;
+  background: #143e47;
+  color: #85ffe7;
   border-radius: 999px;
   font-size: 0.8rem;
   padding: 7px 12px;
@@ -353,12 +498,13 @@ body {
 }
 
 .vote-btn:hover {
-  background: #e6f3f7;
+  background: #1d5561;
 }
 
 .vote-btn.active {
-  background: #d6ebf0;
-  border-color: #8bb1ba;
+  background: #18e2bb;
+  border-color: #18e2bb;
+  color: #0d1b30;
 }
 
 .vote-count {
@@ -395,13 +541,19 @@ body {
   gap: 6px;
 }
 
+.manager-meta .chip {
+  color: #ffffff;
+  background: #2e3a71;
+  border-color: #4f63ad;
+}
+
 .avatar-wrap {
   width: 52px;
   height: 52px;
   border-radius: 50%;
   overflow: hidden;
-  border: 2px solid #d8ceb8;
-  background: #f5efe4;
+  border: 2px solid #4b5ea0;
+  background: #1a2349;
   flex-shrink: 0;
 }
 
@@ -415,22 +567,8 @@ body {
   display: grid;
   place-items: center;
   font-weight: 700;
-  color: #5f5b53;
-  background: #ece2cf;
-}
-
-.avatar-upload-btn {
-  border: 1px solid #bfd2d6;
-  background: #f5fbfd;
-  color: #163f48;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  padding: 5px 10px;
-  cursor: pointer;
-}
-
-.avatar-upload-btn:hover {
-  background: #e6f3f7;
+  color: #b8c8eb;
+  background: #2a3566;
 }
 
 .table-manager {

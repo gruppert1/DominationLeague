@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Domination League | Login</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="site-shell">
+    <header class="site-header">
+      <h1 class="league-title">Domination League</h1>
+      <p class="league-subtitle">Member Login</p>
+    </header>
+
+    <main class="main-content">
+      <section class="panel">
+        <h2>Sign In</h2>
+        <p class="lead">Enter your Sleeper username and password to access the site.</p>
+
+        <form id="login-form" class="forum-inline-form">
+          <label class="filter-control">
+            <span>Username</span>
+            <input id="login-username" type="text" autocomplete="username" required>
+          </label>
+          <label class="filter-control">
+            <span>Password</span>
+            <input id="login-password" type="password" autocomplete="current-password" required>
+          </label>
+          <button type="submit" class="forum-action-btn">Login</button>
+        </form>
+
+        <p id="login-status" class="footer-note">Please log in to continue.</p>
+      </section>
+    </main>
+  </div>
+
+  <script src="login.js"></script>
+</body>
+</html>

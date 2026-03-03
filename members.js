@@ -30,27 +30,6 @@ function formatFinishWithYear(value, year) {
   return `${value} (${year})`;
 }
 
-function avatarStorageKey(member) {
-  return `domination-league-avatar-${member.rosterId}`;
-}
-
-function readUploadedAvatar(member) {
-  try {
-    return window.localStorage.getItem(avatarStorageKey(member));
-  } catch (error) {
-    return null;
-  }
-}
-
-function writeUploadedAvatar(member, dataUrl) {
-  try {
-    window.localStorage.setItem(avatarStorageKey(member), dataUrl);
-    return true;
-  } catch (error) {
-    return false;
-  }
-}
-
 function getInitials(name) {
   const parts = String(name || "")
     .trim()
@@ -131,50 +110,14 @@ function renderMemberCard(member, currentSeason) {
   managerChip.className = "chip";
   managerChip.textContent = `Manager: ${member.memberName}`;
 
-  const uploadButton = document.createElement("button");
-  uploadButton.className = "avatar-upload-btn";
-  uploadButton.type = "button";
-  uploadButton.textContent = "Upload Photo";
-
-  const uploadInput = document.createElement("input");
-  uploadInput.type = "file";
-  uploadInput.accept = "image/*";
-  uploadInput.className = "avatar-upload-input";
-  uploadInput.hidden = true;
-
-  const initialAvatar = readUploadedAvatar(member) || member.avatarUrl || null;
+  const initialAvatar = member.avatarUrl || null;
   setAvatarDisplay(avatarImg, avatarFallback, initialAvatar);
 
   avatarImg.addEventListener("error", () => {
-    setAvatarDisplay(avatarImg, avatarFallback, readUploadedAvatar(member));
+    setAvatarDisplay(avatarImg, avatarFallback, null);
   });
 
-  uploadButton.addEventListener("click", () => {
-    uploadInput.click();
-  });
-
-  uploadInput.addEventListener("change", () => {
-    const [file] = uploadInput.files || [];
-    if (!file) {
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = typeof reader.result === "string" ? reader.result : null;
-      if (!dataUrl) {
-        return;
-      }
-
-      const saved = writeUploadedAvatar(member, dataUrl);
-      if (saved) {
-        setAvatarDisplay(avatarImg, avatarFallback, dataUrl);
-      }
-    };
-    reader.readAsDataURL(file);
-  });
-
-  managerMeta.append(managerChip, uploadButton, uploadInput);
+  managerMeta.append(managerChip);
   managerInfo.append(avatarWrap, managerMeta);
 
   header.append(teamName, managerInfo);

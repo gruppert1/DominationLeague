@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: domination-league-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-domination_league}
+      POSTGRES_USER: ${POSTGRES_USER:-domination_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-domination_pass}
+    volumes:
+      - domination_league_pgdata:/var/lib/postgresql/data
+
+volumes:
+  domination_league_pgdata:
